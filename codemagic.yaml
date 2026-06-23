@@ -1,18 +1,17 @@
 workflows:
   android-debug:
     name: Android Debug Workflow
-    instance_type: linux_x86_64
+    # Burayı sistemin tam olarak izin verdiği 'linux' değerine çektik
+    instance_type: linux
     max_build_duration: 30
-    environment:
-      android_ndk: 26.1.10909125
     scripts:
       - name: Build APK
         script: |
-          # Java 21 ortamını sunucuda aktif hale getiriyoruz
-          export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+          # Linux sunucusundaki Java 17 ortamını aktif ediyoruz
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           export PATH=$JAVA_HOME/bin:$PATH
           
-          # Doğrudan klasöre girip derliyoruz
+          # Doğrudan klasörüne girip derlemeyi başlatıyoruz
           cd aykut
           gradle assembleDebug
     artifacts:
