@@ -2,19 +2,22 @@ workflows:
   android-debug:
     name: Android Debug Workflow
     instance_type: mac_mini_m1
+    environment:
+      groups:
+        - java_version
+      vars:
+        JAVA_VERSION: "21"
     scripts:
       - name: Build APK
         script: |
-          # 1. En güncel Java sürümünü aktif ediyoruz
-          export JAVA_HOME=$JAVA_HOME_17
+          # En güncel Java 21'i sunucuda aktif ediyoruz
+          export JAVA_HOME=$JAVA_HOME_21
           export PATH=$JAVA_HOME/bin:$PATH
           
-          # 2. Gerekli Gradle 9.3.1 sürümünü indirip kuruyoruz
-          wget https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
-          sudo unzip -o -d /opt/gradle gradle-9.3.1-bin.zip
-          export PATH=/opt/gradle/gradle-9.3.1/bin:$PATH
+          # Codemagic'in kendi içindeki Gradle sürümünü otomatik olarak güncelliyoruz
+          sdk install gradle 9.3.1
           
-          # 3. Klasöre girip doğrudan derlemeyi başlatıyoruz
+          # Klasöre girip derliyoruz
           cd aykut
           gradle assembleDebug
     artifacts:
