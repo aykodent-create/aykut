@@ -8,7 +8,9 @@ workflows:
           export JAVA_HOME=$JAVA_HOME_21
           export PATH=$JAVA_HOME/bin:$PATH
           cd aykut
-          chmod +x gradle/wrapper/gradle-wrapper.properties
-          gradle assembleDebug
+          # Çalıştırılabilir olması için izinleri doğrudan tüm wrapper klasörüne veriyoruz
+          chmod -R +x gradle/
+          # Sistemi yerel gradle yerine eklediğimiz sarmalayıcı (wrapper) ile tetikliyoruz
+          ./gradlew assembleDebug
     artifacts:
       - aykut/app/build/outputs/apk/debug/*.apk
