@@ -1,8 +1,7 @@
 workflows:
   android-debug:
     name: Android Debug Workflow
-    environment:
-      android_sdk: default
+    instance_type: mac_mini_m1
     scripts:
       - name: Build APK
         script: |
