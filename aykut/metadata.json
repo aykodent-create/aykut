@@ -1,0 +1,6 @@
+{
+  "name": "aykut",
+  "description": "Barkod okutarak bakkal ürün fiyatlarını kaydedin, sesli dinleyin ve cihazlar arası senkronize edin.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
