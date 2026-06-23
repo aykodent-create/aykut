@@ -6,11 +6,6 @@ workflows:
     scripts:
       - name: Build APK
         script: |
-          cd uygulama
-          chmod +x gradle
-          ./gradlew assembleDebug
+          gradle assembleDebug
     artifacts:
-      - uygulama/build/outputs/apk/debug/*.apk
-git add codemagic.yaml 
-git commit -m 'İlk iş akışını ekle' 
-git push
+      - app/build/outputs/apk/debug/*.apk
