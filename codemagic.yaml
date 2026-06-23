@@ -3,16 +3,18 @@ workflows:
     name: Android Debug Workflow
     instance_type: mac_mini_m1
     scripts:
-      - name: Install Correct Gradle Version
-        script: |
-          # Codemagic sunucusuna zorla ihtiyacımız olan 9.3.1 sürümünü kuruyoruz
-          wget https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
-          sudo unzip -d /opt/gradle gradle-9.3.1-bin.zip
-          export PATH=/opt/gradle/gradle-9.3.1/bin:$PATH
-          gradle -v
       - name: Build APK
         script: |
+          # 1. En güncel Java sürümünü aktif ediyoruz
+          export JAVA_HOME=$JAVA_HOME_17
+          export PATH=$JAVA_HOME/bin:$PATH
+          
+          # 2. Gerekli Gradle 9.3.1 sürümünü indirip kuruyoruz
+          wget https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          sudo unzip -o -d /opt/gradle gradle-9.3.1-bin.zip
           export PATH=/opt/gradle/gradle-9.3.1/bin:$PATH
+          
+          # 3. Klasöre girip doğrudan derlemeyi başlatıyoruz
           cd aykut
           gradle assembleDebug
     artifacts:
