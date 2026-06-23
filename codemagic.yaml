@@ -1,0 +1,12 @@
+workflows:
+  android-debug:
+    name: Android Debug Workflow
+    environment:
+      android_sdk: default
+    scripts:
+      - name: Build APK
+        script: |
+          cd aykut
+          gradle assembleDebug
+    artifacts:
+      - aykut/app/build/outputs/apk/debug/*.apk
