@@ -2,23 +2,14 @@ workflows:
   android-debug:
     name: Android Debug Workflow
     instance_type: mac_mini_m1
-    environment:
-      groups:
-        - java_version
-      vars:
-        JAVA_VERSION: "21"
     scripts:
       - name: Build APK
         script: |
-          # En güncel Java 21'i sunucuda aktif ediyoruz
           export JAVA_HOME=$JAVA_HOME_21
           export PATH=$JAVA_HOME/bin:$PATH
-          
-          # Codemagic'in kendi içindeki Gradle sürümünü otomatik olarak güncelliyoruz
-          sdk install gradle 9.3.1
-          
-          # Klasöre girip derliyoruz
           cd aykut
-          gradle assembleDebug
+          # Yeni eklediğimiz gradlew dosyasına doğrudan çalıştırma izni veriyoruz
+          chmod +x gradlew
+          ./gradlew assembleDebug
     artifacts:
       - aykut/app/build/outputs/apk/debug/*.apk
