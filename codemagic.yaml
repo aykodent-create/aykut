@@ -3,8 +3,16 @@ workflows:
     name: Android Debug Workflow
     instance_type: mac_mini_m1
     scripts:
+      - name: Install Correct Gradle Version
+        script: |
+          # Codemagic sunucusuna zorla ihtiyacımız olan 9.3.1 sürümünü kuruyoruz
+          wget https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          sudo unzip -d /opt/gradle gradle-9.3.1-bin.zip
+          export PATH=/opt/gradle/gradle-9.3.1/bin:$PATH
+          gradle -v
       - name: Build APK
         script: |
+          export PATH=/opt/gradle/gradle-9.3.1/bin:$PATH
           cd aykut
           gradle assembleDebug
     artifacts:
