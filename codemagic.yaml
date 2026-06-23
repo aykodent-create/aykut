@@ -1,25 +1,18 @@
 workflows:
   android-debug:
     name: Android Debug Workflow
-    instance_type: mac_mini_m1
+    instance_type: linux_x86_64
+    max_build_duration: 30
+    environment:
+      android_ndk: 26.1.10909125
     scripts:
       - name: Build APK
         script: |
-          # 1. Java 21'i kesin olarak aktif ediyoruzz
-          export JAVA_HOME=$JAVA_HOME_21
+          # Java 21 ortamını sunucuda aktif hale getiriyoruz
+          export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
           export PATH=$JAVA_HOME/bin:$PATH
           
-          # 2. Gradle 9.3.1 sürümünü manuel olarak indirip kuruyoruz (sdk kullanmadan)
-          wget -q https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
-          sudo unzip -q -o -d /opt/gradle gradle-9.3.1-bin.zip
-          
-          # 3. Yeni indirdiğimiz Gradle'ı sisteme ana motor olarak tanıtıyoruz
-          export PATH=/opt/gradle/gradle-9.3.1/bin:$PATH
-          
-          # 4. Sürümü kontrol edip doğrulamak için yazdırıyoruz
-          gradle -v
-          
-          # 5. Senin klasörüne girip derlemeyi ateşliyoruz
+          # Doğrudan klasöre girip derliyoruz
           cd aykut
           gradle assembleDebug
     artifacts:
