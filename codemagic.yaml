@@ -1,17 +1,23 @@
 workflows:
   android-debug:
     name: Android Debug Workflow
-    # Burayı sistemin tam olarak izin verdiği 'linux' değerine çektik
-    instance_type: linux
-    max_build_duration: 30
+    # Fatura planının kesin izin verdiği Mac mini'ye geri döndük
+    instance_type: mac_mini_m1
     scripts:
       - name: Build APK
         script: |
-          # Linux sunucusundaki Java 17 ortamını aktif ediyoruz
-          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          # 1. Java 21'i aktif ediyoruz
+          export JAVA_HOME=$JAVA_HOME_21
           export PATH=$JAVA_HOME/bin:$PATH
           
-          # Doğrudan klasörüne girip derlemeyi başlatıyoruz
+          # 2. Gradle 9.3.1'i kendi ev dizinimize (sudo olmadan) indirip kuruyoruz
+          wget -q https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          unzip -q -o gradle-9.3.1-bin.zip -d $HOME/gradle_dist
+          
+          # 3. Bu yeni Gradle yolunu sisteme tanıtıyoruz
+          export PATH=$HOME/gradle_dist/gradle-9.3.1/bin:$PATH
+          
+          # 4. Klasörümüze girip derlemeyi başlatıyoruz
           cd aykut
           gradle assembleDebug
     artifacts:
