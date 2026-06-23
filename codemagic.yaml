@@ -2,22 +2,21 @@ workflows:
   android-debug:
     name: Android Debug Workflow
     instance_type: mac_mini_m1
-    environment:
-      groups:
-        - java_version
-      vars:
-        JAVA_VERSION: "21"
     scripts:
       - name: Build APK
         script: |
-          # En güncel Java 21'i sunucuda aktif ediyoruz
-          export JAVA_HOME=$JAVA_HOME_21
+          # 1. Java 17'yi kesin olarak tanımlıyoruz
+          export JAVA_HOME=$JAVA_HOME_17
           export PATH=$JAVA_HOME/bin:$PATH
           
-          # Codemagic'in kendi içindeki Gradle sürümünü otomatik olarak güncelliyoruz
-          sdk install gradle 9.3.1
+          # 2. SDKMAN aracını hafızaya yükleyip aktif ediyoruz
+          [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
           
-          # Klasöre girip derliyoruz
+          # 3. Gradle 9.3.1 sürümünü kurup sisteme ana motor olarak seçiyoruz
+          sdk install gradle 9.3.1 < /dev/null
+          sdk use gradle 9.3.1
+          
+          # 4. Senin klasörüne girip derlemeyi yerel gradle ile ateşliyoruz
           cd aykut
           gradle assembleDebug
     artifacts:
