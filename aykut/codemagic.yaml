@@ -11,3 +11,6 @@ workflows:
           ./gradlew assembleDebug
     artifacts:
       - uygulama/build/outputs/apk/debug/*.apk
+git add codemagic.yaml 
+git commit -m 'İlk iş akışını ekle' 
+git push
