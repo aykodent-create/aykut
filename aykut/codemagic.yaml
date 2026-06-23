@@ -1,0 +1,11 @@
+workflows:
+  android-debug:
+    name: Android Debug Workflow
+    environment:
+      android_sdk: default
+    scripts:
+      - name: Build APK
+        script: |
+          ./gradlew assembleDebug
+    artifacts:
+      - app/build/outputs/apk/debug/*.apk
