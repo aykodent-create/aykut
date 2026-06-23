@@ -6,7 +6,6 @@ workflows:
       - name: Build APK
         script: |
           cd aykut
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          gradle assembleDebug
     artifacts:
       - aykut/app/build/outputs/apk/debug/*.apk
