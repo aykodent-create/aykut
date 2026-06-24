@@ -118,10 +118,7 @@ class BakkalViewModel(
     }.stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList())
 
     init {
-        // Automatically sync on launch
-        viewModelScope.launch {
-            syncWithCloud()
-        }
+        // No automatic sync on launch to give user complete manual control
     }
 
     fun updateShopCode(newCode: String) {
@@ -129,10 +126,6 @@ class BakkalViewModel(
         if (formattedCode.isNotBlank()) {
             sharedPrefs.edit().putString("shop_code", formattedCode).apply()
             shopCode = formattedCode
-            // Immediately sync with the newly joined shop
-            viewModelScope.launch {
-                syncWithCloud()
-            }
         }
     }
 
@@ -233,17 +226,52 @@ class BakkalViewModel(
             showEditDialog = false
             scannedBarcode = null
             scannedProduct = null
-            
-            // Auto - Sync immediately
-            syncWithCloud()
         }
     }
 
     fun deleteProduct(product: Product) {
         viewModelScope.launch {
             repository.deleteProduct(product.barcode)
-            // Auto - Sync immediately
-            syncWithCloud()
+        }
+    }
+
+    fun pushToCloud() {
+        if (syncing) return
+        syncing = true
+        syncSuccessMessage = null
+        syncErrorMessage = null
+
+        viewModelScope.launch {
+            val result = repository.pushToCloud(shopCode)
+            syncing = false
+            result.fold(
+                onSuccess = {
+                    syncSuccessMessage = "Veriler Buluta Gönderildi"
+                },
+                onFailure = { error ->
+                    syncErrorMessage = "Hata: ${error.localizedMessage ?: "Bağlantı sorunu"}"
+                }
+            )
+        }
+    }
+
+    fun pullFromCloud() {
+        if (syncing) return
+        syncing = true
+        syncSuccessMessage = null
+        syncErrorMessage = null
+
+        viewModelScope.launch {
+            val result = repository.pullFromCloud(shopCode)
+            syncing = false
+            result.fold(
+                onSuccess = {
+                    syncSuccessMessage = "Veriler Buluttan Güncellendi"
+                },
+                onFailure = { error ->
+                    syncErrorMessage = "Hata: ${error.localizedMessage ?: "Bağlantı sorunu"}"
+                }
+            )
         }
     }
 
@@ -275,7 +303,6 @@ class BakkalViewModel(
     fun clearAllInventory() {
         viewModelScope.launch {
             repository.clearLocal()
-            syncWithCloud()
         }
     }
 
@@ -346,7 +373,6 @@ class BakkalViewModel(
             
             viewModelScope.launch {
                 repository.insertProductsDirect(products)
-                syncWithCloud()
             }
             Result.success(products.size)
         } catch (e: Exception) {
@@ -382,7 +408,6 @@ class BakkalViewModel(
             
             viewModelScope.launch {
                 repository.insertProductsDirect(products)
-                syncWithCloud()
             }
             Result.success(products.size)
         } catch (e: Exception) {

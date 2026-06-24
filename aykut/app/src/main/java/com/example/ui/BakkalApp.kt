@@ -52,6 +52,7 @@ fun BakkalApp(viewModel: BakkalViewModel) {
     
     var activeTab by remember { mutableIntStateOf(0) } // 0: Dashboard, 1: Inventory List, 2: Profil
     var showCameraScanner by remember { mutableStateOf(false) }
+    var showCameraForEditDialog by remember { mutableStateOf(false) }
 
     // SnackBar Host
     val snackbarHostState = remember { SnackbarHostState() }
@@ -140,6 +141,22 @@ fun BakkalApp(viewModel: BakkalViewModel) {
         return
     }
 
+    if (showCameraForEditDialog) {
+        CameraBarcodeScanner(
+            onBarcodeScanned = { barcode ->
+                viewModel.currentBarcodeInEdit = barcode
+            },
+            onDismiss = { showCameraForEditDialog = false },
+            products = products,
+            scannedProduct = null,
+            scannedBarcode = null,
+            basketItems = emptyList(),
+            onRemoveFromBasket = {},
+            onClearBasket = {}
+        )
+        return
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
@@ -200,6 +217,8 @@ fun BakkalApp(viewModel: BakkalViewModel) {
             name = viewModel.currentNameInEdit,
             price = viewModel.currentPriceInEdit,
             description = viewModel.currentDescriptionInEdit,
+            onBarcodeChange = { viewModel.currentBarcodeInEdit = it },
+            onScanClick = { showCameraForEditDialog = true },
             onNameChange = { viewModel.currentNameInEdit = it },
             onPriceChange = { viewModel.currentPriceInEdit = it },
             onDescriptionChange = { viewModel.currentDescriptionInEdit = it },
@@ -594,47 +613,71 @@ fun DashboardTab(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 )
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Bulut Senkronizasyonu",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Kayıtlı ürün sayısı: ${products.size}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Button(
-                        onClick = { viewModel.syncWithCloud() },
-                        enabled = !viewModel.syncing,
-                        modifier = Modifier.testTag("sync_now_button"),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondary
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Column {
+                            Text(
+                                text = "Bulut Senkronizasyonu",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Kayıtlı Ürün Sayısı: ${products.size}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         if (viewModel.syncing) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.onSecondary,
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.primary,
                                 strokeWidth = 2.dp
                             )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Eşitle",
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Eşitle")
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Senkronizasyona Gönder (Upload)
+                        Button(
+                            onClick = { viewModel.pushToCloud() },
+                            enabled = !viewModel.syncing,
+                            modifier = Modifier.weight(1f).testTag("push_to_cloud_button"),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Senkronizasyona Gönder", fontSize = 11.sp, maxLines = 1)
+                        }
+
+                        // Senkronizasyondan Güncelle (Download)
+                        Button(
+                            onClick = { viewModel.pullFromCloud() },
+                            enabled = !viewModel.syncing,
+                            modifier = Modifier.weight(1f).testTag("pull_from_cloud_button"),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Senkronizasyondan Güncelle", fontSize = 11.sp, maxLines = 1)
                         }
                     }
                 }
@@ -878,6 +921,8 @@ fun ProductEditDialog(
     name: String,
     price: String,
     description: String,
+    onBarcodeChange: (String) -> Unit,
+    onScanClick: () -> Unit,
     onNameChange: (String) -> Unit,
     onPriceChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
@@ -900,18 +945,23 @@ fun ProductEditDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Barcode Reader Display Field
+                // Barcode Reader Display & Manual Entry Field
                 OutlinedTextField(
                     value = barcode,
-                    onValueChange = {},
-                    modifier = Modifier.fillMaxWidth(),
+                    onValueChange = onBarcodeChange,
+                    modifier = Modifier.fillMaxWidth().testTag("dialog_barcode_input"),
                     label = { Text("Barkod No") },
-                    readOnly = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                    ),
-                    leadingIcon = { Icon(Icons.Default.QrCode, contentDescription = null) }
+                    leadingIcon = { Icon(Icons.Default.QrCode, contentDescription = null) },
+                    trailingIcon = {
+                        IconButton(onClick = onScanClick) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = "Kamerayla Tara",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    singleLine = true
                 )
 
                 // Name TextField
@@ -1234,6 +1284,78 @@ fun ProfileTab(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+
+        // Bulut Senkronizasyonu Section
+        Text(
+            text = "Bulut Senkronizasyonu",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Bulut senkronizasyonu manuel olarak yönetilir. Sildiğiniz veya eklediğiniz ürünleri bulut ile eşitlemek için aşağıdaki seçenekleri kullanın.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Senkronizasyona Gönder (Upload)
+                    Button(
+                        onClick = { viewModel.pushToCloud() },
+                        enabled = !viewModel.syncing,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (viewModel.syncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Buluta Gönder", fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
+
+                    // Senkronizasyondan Güncelle (Download)
+                    Button(
+                        onClick = { viewModel.pullFromCloud() },
+                        enabled = !viewModel.syncing,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (viewModel.syncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Buluttan Güncelle", fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
                 }
             }
         }
