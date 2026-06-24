@@ -50,10 +50,65 @@ fun BakkalApp(viewModel: BakkalViewModel) {
     val scope = rememberCoroutineScope()
     val products by viewModel.rawProducts.collectAsState()
     
-    var activeTab by remember { mutableIntStateOf(0) } // 0: Dashboard, 1: Inventory List
-    
+    var activeTab by remember { mutableIntStateOf(0) } // 0: Dashboard, 1: Inventory List, 2: Profil
+    var showCameraScanner by remember { mutableStateOf(false) }
+
     // SnackBar Host
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Create Document Launcher for backup export
+    val createDocLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    val result = viewModel.backupToStream(outputStream)
+                    scope.launch {
+                        result.fold(
+                            onSuccess = {
+                                snackbarHostState.showSnackbar("Veriler başarıyla yedeklendi.")
+                            },
+                            onFailure = { error ->
+                                snackbarHostState.showSnackbar("Yedekleme hatası: ${error.localizedMessage}")
+                            }
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                scope.launch {
+                    snackbarHostState.showSnackbar("Dosya yazılamadı: ${e.localizedMessage}")
+                }
+            }
+        }
+    }
+
+    // Open Document Launcher for restore import
+    val openDocLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    val result = viewModel.restoreFromStream(inputStream)
+                    scope.launch {
+                        result.fold(
+                            onSuccess = { count ->
+                                snackbarHostState.showSnackbar("Yedek başarıyla yüklendi: $count ürün geri yüklendi.")
+                            },
+                            onFailure = { error ->
+                                snackbarHostState.showSnackbar("Yükleme hatası: ${error.localizedMessage}")
+                            }
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                scope.launch {
+                    snackbarHostState.showSnackbar("Dosya okunamadı: ${e.localizedMessage}")
+                }
+            }
+        }
+    }
 
     // Synchronize snackbar triggers on messages
     LaunchedEffect(viewModel.syncSuccessMessage) {
@@ -67,6 +122,22 @@ fun BakkalApp(viewModel: BakkalViewModel) {
             snackbarHostState.showSnackbar(it)
             viewModel.dismissMessages()
         }
+    }
+
+    if (showCameraScanner) {
+        CameraBarcodeScanner(
+            onBarcodeScanned = { barcode ->
+                viewModel.onBarcodeScanned(barcode)
+            },
+            onDismiss = { showCameraScanner = false },
+            products = products,
+            scannedProduct = viewModel.scannedProduct,
+            scannedBarcode = viewModel.scannedBarcode,
+            basketItems = viewModel.basketItems,
+            onRemoveFromBasket = { viewModel.removeFromBasket(it) },
+            onClearBasket = { viewModel.clearBasket() }
+        )
+        return
     }
 
     Scaffold(
@@ -88,6 +159,12 @@ fun BakkalApp(viewModel: BakkalViewModel) {
                     icon = { Icon(Icons.Default.List, contentDescription = "Katalog") },
                     label = { Text("Ürün Kataloğu") }
                 )
+                NavigationBarItem(
+                    selected = activeTab == 2,
+                    onClick = { activeTab = 2 },
+                    icon = { Icon(Icons.Default.Person, contentDescription = "Profil") },
+                    label = { Text("Profil") }
+                )
             }
         }
     ) { innerPadding ->
@@ -98,21 +175,20 @@ fun BakkalApp(viewModel: BakkalViewModel) {
                 .background(MaterialTheme.colorScheme.background)
         ) {
             when (activeTab) {
-                0 -> DashboardTab(viewModel = viewModel, onScanClick = {
-                    val scanner = GmsBarcodeScanning.getClient(context)
-                    scanner.startScan()
-                        .addOnSuccessListener { barcode ->
-                            barcode.rawValue?.let {
-                                viewModel.onBarcodeScanned(it)
-                            }
-                        }
-                        .addOnFailureListener { e ->
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Tarama başarısız: ${e.localizedMessage}")
-                            }
-                        }
-                })
+                0 -> DashboardTab(
+                    viewModel = viewModel,
+                    onScanClick = { showCameraScanner = true }
+                )
                 1 -> InventoryListTab(viewModel = viewModel)
+                2 -> ProfileTab(
+                    viewModel = viewModel,
+                    snackbarHostState = snackbarHostState,
+                    onBackupClick = {
+                        val timestamp = java.text.SimpleDateFormat("dd_MM_yyyy_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
+                        createDocLauncher.launch("aykut_$timestamp.txt")
+                    },
+                    onRestoreClick = { openDocLauncher.launch(arrayOf("text/plain")) }
+                )
             }
         }
     }
@@ -148,49 +224,25 @@ fun DashboardTab(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
-        // Hero Image Header representing the Bakkal Theme
-        Box(
+        // Clean, simple header instead of image banner (Sade tasarım)
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f))
+                .padding(horizontal = 24.dp, vertical = 24.dp)
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.img_bakkal_hero_1782222675185),
-                contentDescription = "Bakkal Hero Banner",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+            Text(
+                text = "Aykut Hızlı Barkod",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary
             )
-            // Linear Gradient overlay for contrast
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
-                            startY = 100f
-                        )
-                    )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Pratik fiyat seslendirici ve eş zamanlı bakkal sistemi",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomStart)
-                    .padding(20.dp)
-            ) {
-                Text(
-                    text = "Aykut Hızlı Barkod",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                )
-                Text(
-                    text = "Pratik fiyat seslendirici ve eş zamanlı bakkal sistemi",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                )
-            }
         }
 
         Column(
@@ -339,6 +391,201 @@ fun DashboardTab(
                 }
             }
 
+            // Manual Barcode Entry/Simulation Field
+            var manualBarcode by remember { mutableStateOf("") }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = manualBarcode,
+                    onValueChange = { manualBarcode = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("manual_barcode_input"),
+                    placeholder = { Text("Barkod no el ile gir...") },
+                    leadingIcon = { Icon(Icons.Default.QrCode, contentDescription = null) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                Button(
+                    onClick = {
+                        if (manualBarcode.isNotBlank()) {
+                            viewModel.onBarcodeScanned(manualBarcode)
+                            manualBarcode = ""
+                        }
+                    },
+                    modifier = Modifier
+                        .height(56.dp)
+                        .testTag("manual_scan_submit_button"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Sorgula")
+                }
+            }
+
+            // Active Scan Result Card (Last Scanned Product)
+            val scannedProduct = viewModel.scannedProduct
+            val scannedBarcode = viewModel.scannedBarcode
+
+            if (scannedBarcode != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("scanned_product_card")
+                        .animateContentSize(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
+                    ),
+                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.secondary)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Okundu",
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                                Text(
+                                    text = "Son Okutulan Ürün",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                            IconButton(
+                                onClick = { viewModel.cancelScanAndEdit() },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Kapat",
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+
+                        if (scannedProduct != null) {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = scannedProduct.name,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.QrCode,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                    )
+                                    Text(
+                                        text = scannedProduct.barcode,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                    )
+                                }
+                                if (scannedProduct.description.isNotBlank()) {
+                                    Text(
+                                        text = scannedProduct.description,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = String.format("%.2f TL", scannedProduct.price),
+                                    style = MaterialTheme.typography.displaySmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    // Re-speak button
+                                    Button(
+                                        onClick = { viewModel.speakProductPrice(scannedProduct) },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.secondary
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                            contentDescription = "Tekrar Söyle"
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Fiyat Söyle")
+                                    }
+
+                                    // Quick edit button
+                                    FilledIconButton(
+                                        onClick = { viewModel.startProductEditing(scannedProduct) },
+                                        colors = IconButtonDefaults.filledIconButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary
+                                        )
+                                    ) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Düzenle")
+                                    }
+                                }
+                            }
+                        } else {
+                            // Scanned but not found
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "Barkod: $scannedBarcode",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = "Bu ürün henüz kayıtlı değil!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Button(
+                                    onClick = { viewModel.startNewProductCreation(scannedBarcode) }
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Ürünü Kaydet")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Cloud synchronization Actions Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -388,63 +635,6 @@ fun DashboardTab(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Eşitle")
-                        }
-                    }
-                }
-            }
-
-            // Quick How To Guidelines Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-            ) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Nasıl Kullanılır?",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    
-                    val steps = listOf(
-                        "1. Kameradan Tarat" to "Yukarıdaki büyük butona tıklayıp kameranızı ürünün barkoduna tutun.",
-                        "2. Fiyat Belirle" to "Ürün kayıtlı değilse fiyatını ve adını yazıp kaydedin.",
-                        "3. Sesli Geri Bildirim" to "Her taratışta sistem ürünün fiyatını otomatik olarak Türkçe seslendirecektir.",
-                        "4. Diğer Telefonlar" to "Aynı bakkal kodunu diğer telefonlara yazarak eş zamanlı veri paylaşın."
-                    )
-
-                    steps.forEach { step ->
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Circle,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .align(Alignment.CenterVertically),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Column {
-                                Text(
-                                    text = step.first,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = step.second,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                         }
                     }
                 }
@@ -984,5 +1174,278 @@ fun KeyButton(
                 )
             )
         }
+    }
+}
+
+@Composable
+fun ProfileTab(
+    viewModel: BakkalViewModel,
+    snackbarHostState: SnackbarHostState,
+    onBackupClick: () -> Unit,
+    onRestoreClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showResetConfirm by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Profile Info Header Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+                Column {
+                    Text(
+                        text = "Bakkal Yöneticisi",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Mağaza Kodu: ${viewModel.shopCode}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // Backup and Restore Section
+        Text(
+            text = "Yedekleme ve Geri Yükleme",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Method 1: Save to local Downloads folder (Direct as aykut_tarih_saat.txt)
+                Text(
+                    text = "Yöntem 1: Doğrudan Telefona (aykut_tarih_saat.txt)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val result = viewModel.backupToDownloadsDirect(context)
+                            scope.launch {
+                                result.fold(
+                                    onSuccess = { fileName ->
+                                        snackbarHostState.showSnackbar("İndirilenler klasörüne $fileName olarak yedeklendi.")
+                                    },
+                                    onFailure = { error ->
+                                        snackbarHostState.showSnackbar("Yedekleme hatası: ${error.localizedMessage}")
+                                    }
+                                )
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Yedekle")
+                    }
+
+                    Button(
+                        onClick = {
+                            val result = viewModel.restoreFromDownloadsDirect(context)
+                            scope.launch {
+                                result.fold(
+                                    onSuccess = { count ->
+                                        snackbarHostState.showSnackbar("Yedek yüklendi: $count ürün geri yüklendi.")
+                                    },
+                                    onFailure = { error ->
+                                        snackbarHostState.showSnackbar(error.localizedMessage ?: "Yükleme hatası.")
+                                    }
+                                )
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Yükle")
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Method 2: Save to custom location using File Picker
+                Text(
+                    text = "Yöntem 2: Farklı Kaydet / Dosya Seç...",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onBackupClick,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Yedekle...")
+                    }
+
+                    OutlinedButton(
+                        onClick = onRestoreClick,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Dosya Seç...")
+                    }
+                }
+            }
+        }
+
+        // Danger/Reset Section
+        Text(
+            text = "Tehlikeli Bölge",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Tüm Ürün Kataloğunu Sil",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Text(
+                    text = "Bu işlem cihazınızdaki ve buluttaki tüm ürünlerinizi kalıcı olarak silecektir. Lütfen yedek aldığınızdan emin olun.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                )
+                Button(
+                    onClick = { showResetConfirm = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Tümünü Sıfırla")
+                }
+            }
+        }
+
+        // About / Info
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Transparent
+            )
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Aykut Hızlı Barkod v1.2",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+    }
+
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("Tüm Kataloğu Sil?") },
+            text = { Text("Tüm verileriniz silinecektir. Bu işlem geri alınamaz!") },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        viewModel.clearAllInventory()
+                        showResetConfirm = false
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Tüm katalog başarıyla sıfırlandı.")
+                        }
+                    }
+                ) {
+                    Text("Kataloğu Sil")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) {
+                    Text("İptal")
+                }
+            }
+        )
     }
 }

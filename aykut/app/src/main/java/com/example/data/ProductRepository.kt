@@ -52,6 +52,14 @@ class ProductRepository(private val productDao: ProductDao) {
         productDao.clearAll()
     }
 
+    suspend fun getAllProductsDirect(): List<Product> {
+        return productDao.getAllProducts()
+    }
+
+    suspend fun insertProductsDirect(products: List<Product>) {
+        productDao.insertProducts(products)
+    }
+
     /**
      * Real-time master-to-master synchronization with jsonblob.com using registry lookups.
      * Combines products from both sources and retains the most recently updated items.
