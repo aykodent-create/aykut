@@ -46,7 +46,8 @@ fun CameraBarcodeScanner(
     scannedBarcode: String?,
     basketItems: List<com.example.data.Product>,
     onRemoveFromBasket: (com.example.data.Product) -> Unit,
-    onClearBasket: () -> Unit
+    onClearBasket: () -> Unit,
+    isRegistrationMode: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -159,25 +160,42 @@ fun CameraBarcodeScanner(
                                     val cleaned = rawValue.trim()
                                     val now = System.currentTimeMillis()
                                     
-                                    if (currentContinuousMode) {
-                                        // Cooldown of 3 seconds for exact same barcode to prevent spamming
-                                        if (cleaned != lastScannedBarcode || (now - lastScanTime) > 3000) {
-                                            lastScannedBarcode = cleaned
-                                            lastScanTime = now
-                                            
-                                            // Perform scan action
-                                            currentOnBarcodeScanned(cleaned)
-                                            
-                                            // If the product doesn't exist, automatically dismiss to enter price
-                                            val exists = currentProducts.any { it.barcode == cleaned }
-                                            if (!exists) {
+                                    if (isRegistrationMode) {
+                                        // In product registration mode, accept any barcode scanned
+                                        if (cleaned.length >= 6) {
+                                            if (cleaned != lastScannedBarcode || (now - lastScanTime) > 1500) {
+                                                lastScannedBarcode = cleaned
+                                                lastScanTime = now
+                                                currentOnBarcodeScanned(cleaned)
                                                 currentOnDismiss()
+                                                break
                                             }
                                         }
                                     } else {
-                                        currentOnBarcodeScanned(cleaned)
-                                        currentOnDismiss()
-                                        break
+                                        // Sales basket scanning screen: ONLY accept if it exists in the products database!
+                                        val exists = currentProducts.any { it.barcode == cleaned }
+                                        if (exists) {
+                                            if (currentContinuousMode) {
+                                                // Cooldown of 3 seconds for the exact same barcode
+                                                if (cleaned != lastScannedBarcode || (now - lastScanTime) > 3000) {
+                                                    lastScannedBarcode = cleaned
+                                                    lastScanTime = now
+                                                    currentOnBarcodeScanned(cleaned)
+                                                }
+                                            } else {
+                                                lastScannedBarcode = cleaned
+                                                lastScanTime = now
+                                                currentOnBarcodeScanned(cleaned)
+                                                currentOnDismiss()
+                                                break
+                                            }
+                                        } else {
+                                            // Silently ignore unrecognized barcode, let it scan again after 1-second delay
+                                            if (cleaned != lastScannedBarcode || (now - lastScanTime) > 1000) {
+                                                lastScannedBarcode = cleaned
+                                                lastScanTime = now
+                                            }
+                                        }
                                     }
                                 }
                             }

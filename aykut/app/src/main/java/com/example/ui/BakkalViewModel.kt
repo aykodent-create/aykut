@@ -39,6 +39,12 @@ class BakkalViewModel(
     var shopCode by mutableStateOf("")
         private set
 
+    var speakProductEnabled by mutableStateOf(true)
+        private set
+
+    var speakProductName by mutableStateOf(true)
+        private set
+
     init {
         // Read saved shop code, or generate a random one if none exists
         val savedCode = sharedPrefs.getString("shop_code", "") ?: ""
@@ -49,6 +55,20 @@ class BakkalViewModel(
         } else {
             shopCode = savedCode
         }
+        
+        // Read voice preferences
+        speakProductEnabled = sharedPrefs.getBoolean("speak_product_enabled", true)
+        speakProductName = sharedPrefs.getBoolean("speak_product_name", true)
+    }
+
+    fun updateSpeakProductEnabled(enabled: Boolean) {
+        sharedPrefs.edit().putBoolean("speak_product_enabled", enabled).apply()
+        speakProductEnabled = enabled
+    }
+
+    fun updateSpeakProductName(enabled: Boolean) {
+        sharedPrefs.edit().putBoolean("speak_product_name", enabled).apply()
+        speakProductName = enabled
     }
 
     private var speechHelper: SpeechHelper? = null
@@ -148,30 +168,34 @@ class BakkalViewModel(
         viewModelScope.launch {
             val product = repository.getProductByBarcode(cleanedBarcode)
             if (product != null) {
-                // Product exists! Speak name and price
+                // Product exists! Speak name and price if enabled
                 scannedProduct = product
-                val message = if (product.name.isNotBlank()) {
-                    "Dıt! ${product.name}, ${formatPriceForSpeech(product.price)}"
-                } else {
-                    "Dıt! Ürün bulundu, fiyati ${formatPriceForSpeech(product.price)}"
+                if (speakProductEnabled) {
+                    val message = if (speakProductName && product.name.isNotBlank()) {
+                        "${product.name}, ${formatPriceForSpeech(product.price)}"
+                    } else {
+                        "Ürün bulundu, fiyatı ${formatPriceForSpeech(product.price)}"
+                    }
+                    speechHelper?.speak(message)
                 }
-                speechHelper?.speak(message)
                 addToBasket(product)
             } else {
-                // New product! Speak "New product price required"
+                // Ignore new products scanned in the main sales screen to prevent misread interruptions
                 scannedProduct = null
-                speechHelper?.speak("Dıt! Yeni ürün, fiyati giriniz")
-                
-                // Prefill details and show edit sheet
-                startNewProductCreation(cleanedBarcode)
             }
         }
     }
 
     fun speakProductPrice(product: Product) {
         playBeep()
-        val text = "Dıt! ${product.name}, fiyati ${formatPriceForSpeech(product.price)}"
-        speechHelper?.speak(text)
+        if (speakProductEnabled) {
+            val text = if (speakProductName && product.name.isNotBlank()) {
+                "${product.name}, fiyatı ${formatPriceForSpeech(product.price)}"
+            } else {
+                "Ürün fiyatı ${formatPriceForSpeech(product.price)}"
+            }
+            speechHelper?.speak(text)
+        }
     }
 
     private fun formatPriceForSpeech(price: Double): String {
