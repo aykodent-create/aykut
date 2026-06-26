@@ -142,6 +142,7 @@ fun CameraBarcodeScanner(
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
 
+            var scanCompleted = false
             var lastScannedBarcode: String? = null
             var lastScanTime = 0L
 
@@ -163,9 +164,8 @@ fun CameraBarcodeScanner(
                                     if (isRegistrationMode) {
                                         // In product registration mode, accept any barcode scanned
                                         if (cleaned.length >= 6) {
-                                            if (cleaned != lastScannedBarcode || (now - lastScanTime) > 1500) {
-                                                lastScannedBarcode = cleaned
-                                                lastScanTime = now
+                                            if (!scanCompleted) {
+                                                scanCompleted = true
                                                 currentOnBarcodeScanned(cleaned)
                                                 currentOnDismiss()
                                                 break
@@ -176,25 +176,24 @@ fun CameraBarcodeScanner(
                                         val exists = currentProducts.any { it.barcode == cleaned }
                                         if (exists) {
                                             if (currentContinuousMode) {
-                                                // Cooldown of 3 seconds for the exact same barcode
-                                                if (cleaned != lastScannedBarcode || (now - lastScanTime) > 3000) {
+                                                // Cooldown of 2.5 seconds ONLY for the exact same barcode to prevent duplicate loop
+                                                if (cleaned != lastScannedBarcode || (now - lastScanTime) > 2500) {
                                                     lastScannedBarcode = cleaned
                                                     lastScanTime = now
                                                     currentOnBarcodeScanned(cleaned)
                                                 }
                                             } else {
-                                                lastScannedBarcode = cleaned
-                                                lastScanTime = now
-                                                currentOnBarcodeScanned(cleaned)
-                                                currentOnDismiss()
-                                                break
+                                                if (!scanCompleted) {
+                                                    scanCompleted = true
+                                                    lastScannedBarcode = cleaned
+                                                    lastScanTime = now
+                                                    currentOnBarcodeScanned(cleaned)
+                                                    currentOnDismiss()
+                                                    break
+                                                }
                                             }
                                         } else {
-                                            // Silently ignore unrecognized barcode, let it scan again after 1-second delay
-                                            if (cleaned != lastScannedBarcode || (now - lastScanTime) > 1000) {
-                                                lastScannedBarcode = cleaned
-                                                lastScanTime = now
-                                            }
+                                            // Silently ignore unrecognized barcode
                                         }
                                     }
                                 }

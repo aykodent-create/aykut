@@ -17,6 +17,7 @@ import com.example.speech.SpeechHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -117,6 +118,42 @@ class BakkalViewModel(
     var currentDescriptionInEdit by mutableStateOf("")
 
     var showEditDialog by mutableStateOf(false)
+    var isEditingExistingProduct by mutableStateOf(false)
+
+    var showAlreadyExistsPrompt by mutableStateOf(false)
+        private set
+    var existingProductToLoad by mutableStateOf<Product?>(null)
+        private set
+
+    fun onBarcodeChangeInEdit(newBarcode: String) {
+        currentBarcodeInEdit = newBarcode
+        if (!isEditingExistingProduct) {
+            val trimmed = newBarcode.trim()
+            if (trimmed.isNotBlank()) {
+                val existing = rawProducts.value.find { it.barcode == trimmed }
+                if (existing != null) {
+                    existingProductToLoad = existing
+                    showAlreadyExistsPrompt = true
+                }
+            }
+        }
+    }
+
+    fun loadExistingProductInfo() {
+        val existing = existingProductToLoad
+        if (existing != null) {
+            currentNameInEdit = existing.name
+            currentPriceInEdit = if (existing.price == 0.0) "" else existing.price.toString()
+            currentDescriptionInEdit = existing.description
+        }
+        showAlreadyExistsPrompt = false
+        existingProductToLoad = null
+    }
+
+    fun dismissAlreadyExistsPrompt() {
+        showAlreadyExistsPrompt = false
+        existingProductToLoad = null
+    }
 
     // Search query for inventory listing
     var searchQuery by mutableStateOf("")
@@ -176,6 +213,7 @@ class BakkalViewModel(
                     } else {
                         "Ürün bulundu, fiyatı ${formatPriceForSpeech(product.price)}"
                     }
+                    delay(350) // Wait for beep to finish
                     speechHelper?.speak(message)
                 }
                 addToBasket(product)
@@ -194,7 +232,10 @@ class BakkalViewModel(
             } else {
                 "Ürün fiyatı ${formatPriceForSpeech(product.price)}"
             }
-            speechHelper?.speak(text)
+            viewModelScope.launch {
+                delay(350) // Wait for beep to finish
+                speechHelper?.speak(text)
+            }
         }
     }
 
@@ -212,14 +253,25 @@ class BakkalViewModel(
     }
 
     fun startNewProductCreation(barcode: String) {
+        isEditingExistingProduct = false
         currentBarcodeInEdit = barcode
         currentNameInEdit = ""
         currentPriceInEdit = ""
         currentDescriptionInEdit = ""
         showEditDialog = true
+
+        val trimmed = barcode.trim()
+        if (trimmed.isNotBlank()) {
+            val existing = rawProducts.value.find { it.barcode == trimmed }
+            if (existing != null) {
+                existingProductToLoad = existing
+                showAlreadyExistsPrompt = true
+            }
+        }
     }
 
     fun startProductEditing(product: Product) {
+        isEditingExistingProduct = true
         currentBarcodeInEdit = product.barcode
         currentNameInEdit = product.name
         currentPriceInEdit = if (product.price == 0.0) "" else product.price.toString()

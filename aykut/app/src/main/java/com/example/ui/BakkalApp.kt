@@ -144,7 +144,7 @@ fun BakkalApp(viewModel: BakkalViewModel) {
     if (showCameraForEditDialog) {
         CameraBarcodeScanner(
             onBarcodeScanned = { barcode ->
-                viewModel.currentBarcodeInEdit = barcode
+                viewModel.onBarcodeChangeInEdit(barcode)
             },
             onDismiss = { showCameraForEditDialog = false },
             products = products,
@@ -218,13 +218,47 @@ fun BakkalApp(viewModel: BakkalViewModel) {
             name = viewModel.currentNameInEdit,
             price = viewModel.currentPriceInEdit,
             description = viewModel.currentDescriptionInEdit,
-            onBarcodeChange = { viewModel.currentBarcodeInEdit = it },
+            onBarcodeChange = { viewModel.onBarcodeChangeInEdit(it) },
             onScanClick = { showCameraForEditDialog = true },
             onNameChange = { viewModel.currentNameInEdit = it },
             onPriceChange = { viewModel.currentPriceInEdit = it },
             onDescriptionChange = { viewModel.currentDescriptionInEdit = it },
             onDismiss = { viewModel.cancelScanAndEdit() },
             onSave = { viewModel.saveEditingProduct() }
+        )
+    }
+
+    // Duplicate barcode detection / update confirmation dialog
+    if (viewModel.showAlreadyExistsPrompt && viewModel.existingProductToLoad != null) {
+        val existing = viewModel.existingProductToLoad!!
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissAlreadyExistsPrompt() },
+            title = {
+                Text(
+                    text = "Ürün Zaten Kayıtlı",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Text(
+                    text = "\"${existing.name}\" ürünü zaten bu barkodla (${existing.barcode}) kayıtlıdır.\n\nMevcut Fiyatı: ${existing.price} TL\n\nBu ürünün mevcut bilgilerini yükleyip fiyatını güncellemek ister misiniz?"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.loadExistingProductInfo() }
+                ) {
+                    Text("Evet, Güncelle")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.dismissAlreadyExistsPrompt() }
+                ) {
+                    Text("İptal")
+                }
+            }
         )
     }
 }
